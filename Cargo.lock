@@ -1034,6 +1034,7 @@ name = "delta-play"
 version = "0.1.0"
 dependencies = [
  "arrow",
+ "delta_kernel",
  "deltalake",
  "parquet",
  "rand",

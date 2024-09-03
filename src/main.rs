@@ -1,7 +1,8 @@
 use arrow::datatypes::{DataType, Field, Schema};
 use arrow::json::ReaderBuilder;
+use delta_kernel::{engine::sync::SyncEngine as DKSyncEngine, table::Table as DKTable};
 use deltalake::{protocol::checkpoints::create_checkpoint, DeltaOps};
-use rand::{distributions::Alphanumeric, rngs::ThreadRng, Rng};
+use rand::{distributions::Alphanumeric, rngs::ThreadRng, seq::IteratorRandom, Rng};
 use serde::Serialize;
 use std::fs::create_dir_all;
 use std::sync::Arc;
@@ -27,7 +28,7 @@ impl Data {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let rng = rand::thread_rng();
+    let mut rng = rand::thread_rng();
 
     let table_path = "./delta-play-table";
     create_dir_all(table_path)?;
@@ -41,6 +42,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .build_decoder()
         .expect("could not bulid decoder");
 
+    let mut versions = vec![];
     for i in 1..=25 {
         let mut cnt = 0;
 
@@ -68,6 +70,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let table = ops.write(batch).await.expect("could not write to table");
 
+        versions.push(table.version() as u64);
+
         if i % 5 == 0 {
             create_checkpoint(&table)
                 .await
@@ -76,6 +80,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     println!("Delta table created successfully at {}", table_path);
+
+    // delta-kernel table
+    let dk_table =
+        DKTable::try_from_uri(table_path).expect("could nto create a table from delta_kernel");
+
+    let dk_engine = DKSyncEngine::new();
+
+    let _version_opt = versions.clone().into_iter().choose(&mut rng);
+    let version_opt = versions.into_iter().last();
+
+    println!("Generating snapshot of version: {:?}", version_opt);
+
+    let dk_snapshot = dk_table
+        .snapshot(&dk_engine, version_opt)
+        .expect("could not create snapshot");
+
+    assert!(dk_snapshot.version() == version_opt.unwrap());
+
+    let dk_metadata = dk_snapshot.metadata();
+
+    println!("schema created_time: {:?}", dk_metadata.created_time);
+    println!("schema ID: {}", dk_metadata.id);
+    println!("schema name: {:?}", dk_metadata.name);
+    println!("schema string: {}", dk_metadata.schema_string);
 
     Ok(())
 }
