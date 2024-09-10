@@ -1,2 +1,6 @@
 /target
 /delta-play-table
+./iceberg/iceberg-catalog
+./iceberg/notebooks/
+./iceberg/warehouse/
+/iceberg/bin/
