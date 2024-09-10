@@ -1246,6 +1246,7 @@ dependencies = [
  "arrow",
  "delta_kernel",
  "deltalake",
+ "futures",
  "iceberg",
  "iceberg-catalog-rest",
  "parquet",
