@@ -19,6 +19,7 @@ services:
 
   postgres:
     image: postgres:13
+    container_name: postgres
     environment:
       POSTGRES_USER: user
       POSTGRES_PASSWORD: pass
@@ -27,6 +28,8 @@ services:
       - 5432:5432
     volumes:
       - ./postgres_data:/var/lib/postgresql/data
+    networks:
+      iceberg_net:
 
   iceberg-rest-catalog-rs:
     image: alpine:latest
@@ -39,17 +42,17 @@ services:
     networks:
       iceberg_net:
     entrypoint: |
-      sh -c "apk add --no-cache curl && curl -L -o /usr/local/bin/iceberg-rest-catalog-rs  https://github.com/hansetag/iceberg-catalog/releases/download/v0.3.0/iceberg-catalog-aarch64-unknown-linux-musl.tar.gz && chmod +x /usr/local/bin/iceberg-rest-catalog-rs && /usr/local/bin/iceberg-rest-catalog-rs"
+      sh -c "apk add --no-cache curl && curl -L -o /usr/local/bin/iceberg-rest-catalog-rs.tar.gz https://github.com/hansetag/iceberg-catalog/releases/download/v0.3.0/iceberg-catalog-aarch64-unknown-linux-musl.tar.gz && cd /usr/local/bin && tar -xvzf iceberg-rest-catalog-rs.tar.gz && ./iceberg-catalog migrate && ./iceberg-catalog serve"
     ports:
       - 8060:8060
     environment:
       - ICEBERG_REST__BASE_URI=http://localhost:8060
       - ICEBERG_REST__LISTEN_PORT=8060
       - AWS_SECRET_ACCESS_KEY=password
-      - ICEBERG_REST__DEFAULT_PROJECT_ID="00000000-0000-0000-0000-000000000000"
-      - ICEBERG_REST__PG_DATABASE_URL_READ="postgres://user:pass@localhost:5432/catalog_database"
-      - ICEBERG_REST__PG_DATABASE_URL_WRITE="postgres://user:pass@localhost:5432/catalog_database"
-      - ICEBERG_REST__PG_ENCRYPTION_KEY="MySecretEncryptionKeyThatIBetterNotLoose"
+      - ICEBERG_REST__DEFAULT_PROJECT_ID=00000000-0000-0000-0000-000000000000
+      - ICEBERG_REST__PG_DATABASE_URL_READ=postgres://user:pass@postgres:5432/catalog_database
+      - ICEBERG_REST__PG_DATABASE_URL_WRITE=postgres://user:pass@postgres:5432/catalog_database
+      - ICEBERG_REST__PG_ENCRYPTION_KEY=MySecretEncryptionKeyThatIBetterNotLoose
       - AWS_REGION=us-east-1
 
   spark-iceberg:
