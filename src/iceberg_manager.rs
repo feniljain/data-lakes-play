@@ -2,9 +2,9 @@ use super::data::DataGen;
 
 use std::{collections::HashMap, future, sync::Arc};
 
+use anyhow::bail;
 use futures::stream::StreamExt;
 use iceberg::{
-    io::FileIOBuilder,
     spec::{DataFileFormat, NestedField, PrimitiveType, Schema, TableMetadata, Type},
     table::Table,
     writer::file_writer::{
@@ -19,10 +19,11 @@ use parquet::file::properties::WriterProperties;
 pub struct IcebergManager {
     catalog: RestCatalog,
     namespace_id: NamespaceIdent,
+    schema: Schema,
 }
 
 impl IcebergManager {
-    pub fn new(catalog_uri: String, namespace_id: String) -> Self {
+    pub fn new(catalog_uri: String, namespace_id: String) -> anyhow::Result<Self> {
         let namespace_id = NamespaceIdent::new(namespace_id);
 
         let config = RestCatalogConfig::builder()
@@ -31,26 +32,6 @@ impl IcebergManager {
             .build();
 
         let catalog = RestCatalog::new(config);
-
-        Self {
-            catalog,
-            namespace_id,
-        }
-    }
-
-    pub async fn create_and_populate_table(
-        &self,
-        tbl_name: String,
-        datagen: DataGen,
-    ) -> anyhow::Result<(Table, TableMetadata)> {
-        // init namespace
-        if !self.catalog.namespace_exists(&self.namespace_id).await? {
-            self.catalog
-                .create_namespace(&self.namespace_id, HashMap::new())
-                .await?;
-        }
-
-        // create table
 
         let schema_builder = Schema::builder();
 
@@ -81,59 +62,74 @@ impl IcebergManager {
 
         println!("built schema");
 
+        Ok(Self {
+            catalog,
+            namespace_id,
+            schema,
+        })
+    }
+
+    pub async fn create_table(&self, tbl_name: String) -> anyhow::Result<()> {
+        // init namespace
+
+        let table_id = TableIdent::new(self.namespace_id.clone(), tbl_name.clone());
+
+        let table_creation = TableCreation::builder()
+            .name(table_id.name.clone())
+            .schema(self.schema.clone())
+            .build();
+
+        let tbl = self
+            .catalog
+            .create_table(&table_id.namespace, table_creation)
+            .await?;
+
+        println!("Table created: {:?}", tbl.metadata());
+
+        Ok(())
+    }
+
+    pub async fn load_table(&self, tbl_name: &str) -> anyhow::Result<Table> {
         let table_idents = self.catalog.list_tables(&self.namespace_id).await?;
 
-        let tbl_ident_opt = table_idents
-            .iter()
-            .find(|tbl_ident| tbl_ident.name() == tbl_name);
+        let tbl_ident_opt = table_idents.iter().find(|tbl_ident| {
+            dbg!(tbl_ident);
+            tbl_ident.name() == tbl_name
+        });
 
-        let (tbl, tbl_metadata) = if let Some(tbl_ident) = tbl_ident_opt {
-            let tbl = self.catalog.load_table(&tbl_ident).await?;
-            let tbl_metadata = tbl.metadata().clone();
+        match tbl_ident_opt {
+            Some(tbl_ident) => Ok(self.catalog.load_table(&tbl_ident).await?),
 
-            dbg!(tbl.file_io());
+            None => bail!("table not found"),
+        }
+    }
 
-            (tbl, tbl_metadata)
-        } else {
-            let table_id = TableIdent::new(self.namespace_id.clone(), tbl_name.clone());
+    pub async fn write_data(self, tbl_name: &str, datagen: DataGen) -> anyhow::Result<()> {
+        let tbl = self.load_table(tbl_name).await?;
 
-            let table_creation = TableCreation::builder()
-                .name(table_id.name.clone())
-                .schema(schema.clone())
-                .build();
+        let tbl_metadata = tbl.metadata().clone();
+        let file_io = tbl.file_io();
 
-            let tbl = self
-                .catalog
-                .create_table(&table_id.namespace, table_creation)
-                .await?;
-
-            println!("Table created: {:?}", tbl.metadata());
-
-            let tbl_metadata = tbl.metadata().clone();
-
-            (tbl, tbl_metadata)
-        };
-
-        let mut props = HashMap::new();
-
-        props.insert("s3.endpoint", "s3://warehouse/");
-        props.insert("s3.access-key-id", "admin");
-        props.insert("s3.secret-access-key", "password");
-        props.insert("s3.region", "local-01");
-
-        let file_io = FileIOBuilder::new("s3").with_props(props).build()?;
+        //let mut props = HashMap::new();
+        //
+        //props.insert("s3.endpoint", "s3://warehouse/");
+        //props.insert("s3.access-key-id", "admin");
+        //props.insert("s3.secret-access-key", "password");
+        //props.insert("s3.region", "local-01");
+        //
+        //let file_io = FileIOBuilder::new("s3").with_props(props).build()?;
 
         println!("File IO created");
 
-        let loc_gen = DefaultLocationGenerator::new(tbl_metadata.clone())?;
+        let loc_gen = DefaultLocationGenerator::new(tbl_metadata)?;
         let file_name_gen =
             DefaultFileNameGenerator::new(String::new(), None, DataFileFormat::Parquet);
 
         // register a writer
         let mut writer = ParquetWriterBuilder::new(
             WriterProperties::new(),
-            Arc::new(schema),
-            file_io,
+            Arc::new(self.schema.clone()),
+            file_io.clone(),
             loc_gen,
             file_name_gen,
         )
@@ -149,7 +145,7 @@ impl IcebergManager {
 
         println!("Wrote data to it: {:?}", record_batch);
 
-        Ok((tbl, tbl_metadata))
+        Ok(())
     }
 
     pub async fn list_tables(&self) -> anyhow::Result<()> {
@@ -231,8 +227,4 @@ spark.sql.catalog.spark_catalog.type                 hive
 * -> create namespace ns_1;
 * -> create table ns_1.tbl(id bigint, value string) using iceberg;
 * -> insert into ns_1.tbl values(1, "1");
-*/
-
-/*
-* Warehouse ID: bc836228-6ead-11ef-91cf-4ba7d2ac8cd3
 */
