@@ -3,7 +3,7 @@ version: "3"
 services:
   minio:
     image: minio/minio
-    container_name: minio
+    container_name: minio_1
     environment:
       - MINIO_ROOT_USER=admin
       - MINIO_ROOT_PASSWORD=password
@@ -14,20 +14,19 @@ services:
           - warehouse.minio
     ports:
       - 9001:9001
-      - 9000:9000
     command: ["server", "/data", "--console-address", ":9001"]
 
   postgres:
     image: postgres:13
-    container_name: postgres
+    container_name: postgres_1
     environment:
       POSTGRES_USER: user
       POSTGRES_PASSWORD: pass
       POSTGRES_DB: catalog_database
     ports:
       - 5432:5432
-    volumes:
-      - ./postgres_data:/var/lib/postgresql/data
+    # volumes:
+      # - ./postgres_data:/var/lib/postgresql/data
     networks:
       iceberg_net:
 
@@ -46,7 +45,7 @@ services:
     ports:
       - 8060:8060
     environment:
-      - ICEBERG_REST__BASE_URI=http://localhost:8060
+      - ICEBERG_REST__BASE_URI=http://iceberg-rest-catalog-rs
       - ICEBERG_REST__LISTEN_PORT=8060
       - AWS_SECRET_ACCESS_KEY=password
       - ICEBERG_REST__DEFAULT_PROJECT_ID=00000000-0000-0000-0000-000000000000
@@ -55,9 +54,17 @@ services:
       - ICEBERG_REST__PG_ENCRYPTION_KEY=MySecretEncryptionKeyThatIBetterNotLoose
       - AWS_REGION=us-east-1
 
+  delta-play:
+    image: delta-play
+    container_name: delta-play
+    depends_on:
+      - iceberg-rest-catalog-rs
+    networks:
+      iceberg_net:
+
   spark-iceberg:
     image: tabulario/spark-iceberg
-    container_name: spark-iceberg
+    container_name: spark-iceberg_1
     build: spark/
     networks:
       iceberg_net:
@@ -78,6 +85,26 @@ services:
     #   curl -L -o /usr/local/bin/iceberg-rest-catalog-rs  https://github.com/hansetag/iceberg-catalog/releases/download/v0.3.0/iceberg-catalog-aarch64-unknown-linux-musl.tar.gz && \
     #   chmod +x /usr/local/bin/iceberg-rest-catalog-rs && \
     #   /usr/local/bin/iceberg-rest-catalog-rs"
+
+  mc:
+    depends_on:
+      - minio
+    image: minio/mc
+    container_name: mc_1
+    networks:
+      iceberg_net:
+    environment:
+      - AWS_ACCESS_KEY_ID=admin
+      - AWS_SECRET_ACCESS_KEY=password
+      - AWS_REGION=us-east-1
+    entrypoint: >
+      /bin/sh -c "
+      until (/usr/bin/mc config host add minio http://minio:9000 admin password) do echo '...waiting...' && sleep 1; done;
+      /usr/bin/mc rm -r --force minio/warehouse;
+      /usr/bin/mc mb minio/warehouse;
+      /usr/bin/mc policy set public minio/warehouse;
+      tail -f /dev/null
+      "
 
 networks:
   iceberg_net:

@@ -14,11 +14,13 @@ use anyhow::bail;
 async fn main() -> anyhow::Result<()> {
     let datagen = DataGen::new();
 
-    let iceberg = IcebergManager::new(
-        String::from("http://localhost:8060/catalog"),
-        String::from("ns_1"),
-    )?;
     let tbl_name = String::from("tbl");
+    let iceberg = IcebergManager::new(
+        String::from("http://iceberg-rest-catalog-rs:8060/catalog"),
+        String::from("ns_1"),
+        String::from("test"),
+    )
+    .await?;
 
     let action = args().skip(1).next();
     match action {

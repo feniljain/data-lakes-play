@@ -23,15 +23,26 @@ pub struct IcebergManager {
 }
 
 impl IcebergManager {
-    pub fn new(catalog_uri: String, namespace_id: String) -> anyhow::Result<Self> {
-        let namespace_id = NamespaceIdent::new(namespace_id);
-
+    pub async fn new(
+        catalog_uri: String,
+        namespace_id: String,
+        warehouse_name: String,
+    ) -> anyhow::Result<Self> {
         let config = RestCatalogConfig::builder()
             .uri(catalog_uri)
-            .warehouse(String::from("test"))
+            .warehouse(warehouse_name)
             .build();
 
         let catalog = RestCatalog::new(config);
+
+        // init namespace
+        let namespace_id = NamespaceIdent::new(namespace_id);
+
+        if !catalog.namespace_exists(&namespace_id).await? {
+            catalog
+                .create_namespace(&namespace_id, HashMap::new())
+                .await?;
+        }
 
         let schema_builder = Schema::builder();
 
@@ -70,8 +81,6 @@ impl IcebergManager {
     }
 
     pub async fn create_table(&self, tbl_name: String) -> anyhow::Result<()> {
-        // init namespace
-
         let table_id = TableIdent::new(self.namespace_id.clone(), tbl_name.clone());
 
         let table_creation = TableCreation::builder()
@@ -217,7 +226,7 @@ spark.sql.extensions                                 org.apache.iceberg.spark.ex
 spark.sql.defaultCatalog                             local
 spark.sql.catalog.local                              org.apache.iceberg.spark.SparkCatalog
 spark.sql.catalog.local.catalog-impl                 org.apache.iceberg.rest.RESTCatalog
-spark.sql.catalog.local.uri                          http://localhost:8060/catalog
+spark.sql.catalog.local.uri                          http://iceberg-rest-catalog-rs:8060/catalog
 spark.sql.catalog.local.token                        dummy
 spark.sql.catalog.local.warehouse                    00000000-0000-0000-0000-000000000000/test
 
