@@ -1,6 +1,11 @@
 /target
+
 /delta-play-table
-./iceberg/iceberg-catalog
-./iceberg/notebooks/
-./iceberg/warehouse/
+
+/iceberg/iceberg-catalog
+/iceberg/postgres_data/
+/iceberg/notebooks/
+/iceberg/warehouse/
 /iceberg/bin/
+
+/hudi/data/
