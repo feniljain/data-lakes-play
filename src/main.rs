@@ -63,8 +63,8 @@ async fn main() -> anyhow::Result<()> {
     let hudi_manager = HudiManager::new();
 
     // this internally uses `Uri::parse_from_file_path()` and it accepts dir path when given like:
-    // `/Users/feniljain` or `/tmp/data` (basically starting with root)
-    // But when same method is given paths like `../hudi/data`, it does not accept it
+    // `/Users/userrr` or `/tmp/data` (basically starting with root)
+    // But when same method is given paths like `../hudi/data` or `~/hudi/data`, it does not accept it
     //
     // I believe hudi-rs should use same methods as delta-rs or iceberg-rs
     hudi_manager

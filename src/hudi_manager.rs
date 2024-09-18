@@ -17,8 +17,6 @@ impl HudiManager {
         //
         // let df: DataFrame = ctx.sql("SELECT * from tbl").await?;
         // df.show().await?;
-        //
-        //
 
         let tbl = Table::new(path).await?;
         let data = tbl.read_snapshot().await?;
