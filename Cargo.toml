@@ -8,6 +8,9 @@ anyhow = "1.0.86"
 arrow = "52.2.0"
 datafusion = "39"
 delta_kernel = "0.3.0"
+# deltalake = { path = "../delta-rs/secondary/crates/deltalake/", features = [
+#     "datafusion",
+# ] }
 deltalake = { version = "0.19.0", features = ["datafusion"] }
 futures = "0.3.30"
 hudi = { version = "0.1.0", features = ["datafusion"] }

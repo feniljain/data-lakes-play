@@ -59,7 +59,7 @@ impl IcebergManager {
                 }),
                 Arc::new(NestedField {
                     id: 1,
-                    name: "vaule".to_string(),
+                    name: "value".to_string(),
                     required: true,
                     field_type: Box::new(Type::Primitive(PrimitiveType::String)),
                     doc: None,
